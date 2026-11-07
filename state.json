@@ -1,6 +1,6 @@
 {
-  "power": false,
-  "updated_at": "2026-11-07T17:15:54Z",
-  "updated_by": "initial",
+  "power": true,
+  "updated_at": "2026-11-07T17:45:06.782Z",
+  "updated_by": "web",
   "last_reboot_at": null
 }
