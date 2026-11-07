@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#05070b" />
+  <meta name="description" content="通过 GitHub 状态文件远程控制 Linux 重启的开关" />
+  <title>Linux Restart</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b12'/%3E%3Cpath d='M32 16v17' stroke='%232ee6a8' stroke-width='6' stroke-linecap='round'/%3E%3Cpath d='M20 24a17 17 0 1 0 24 0' fill='none' stroke='%232ee6a8' stroke-width='6' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <main class="shell">
+    <p class="eyebrow">Linux Restart</p>
+    <h1>远程重启开关</h1>
+
+    <div class="switch-wrap">
+      <span class="halo" aria-hidden="true"></span>
+      <button id="power" class="power" type="button" aria-pressed="false" aria-label="重启开关">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M12 3v8" />
+          <path d="M6.6 6.6a8 8 0 1 0 10.8 0" />
+        </svg>
+      </button>
+    </div>
+
+    <p id="status" class="status" aria-live="polite">正在读取状态…</p>
+
+    <dl class="meta">
+      <div>
+        <dt>状态更新时间</dt>
+        <dd id="updated">—</dd>
+      </div>
+      <div>
+        <dt>上次重启</dt>
+        <dd id="lastReboot">—</dd>
+      </div>
+    </dl>
+
+    <p class="hint" id="hint">打开后由 NAS 上的定时任务在 2 小时内检测并执行重启，状态会写回 GitHub 仓库。</p>
+
+    <button id="refresh" class="refresh" type="button">刷新状态</button>
+
+    <footer>
+      <span id="mode">—</span>
+      <span class="dot" aria-hidden="true"></span>
+      <span id="sync">—</span>
+    </footer>
+  </main>
+
+  <div id="passModal" class="modal" hidden>
+    <form id="passForm" class="dialog" autocomplete="on">
+      <h2>需要访问口令</h2>
+      <p>该操作会写入 GitHub 状态文件，请输入部署时配置的 <code>TOGGLE_PASSCODE</code>。</p>
+      <input id="passInput" type="password" inputmode="text" placeholder="访问口令" autocomplete="current-password" required />
+      <div class="dialog-actions">
+        <button type="button" id="passCancel" class="ghost">取消</button>
+        <button type="submit" class="primary">确认</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="./assets/config.js"></script>
+  <script src="./assets/app.js"></script>
+</body>
+</html>

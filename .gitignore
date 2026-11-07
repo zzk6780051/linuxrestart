@@ -1,0 +1,10 @@
+# 本地密钥 / 临时文件
+.env
+.env.*
+*.local
+node_modules/
+.wrangler/
+.dev.vars
+
+# 系统日志
+*.log
