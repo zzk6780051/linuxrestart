@@ -3,7 +3,7 @@
 一个「远程重启开关」：网页上只有一个按钮，开关状态写入 GitHub 仓库里的 `state.json`；
 NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把状态写回关闭，再重启本机**。
 同一个定时任务还会每小时检查一次 NAS 状态，并写入 [notify 仓库](https://github.com/zzk6780051/notify)
-`data.json` 的 `id=3` 通知（「实时通知中心」页面展示）。
+`data.json` 的 `id=1` 通知（「实时通知中心」页面展示）。
 
 ```
        浏览器（Cloudflare Pages）
@@ -17,7 +17,7 @@ NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把�
                     ▼
    NAS cron（每小时） linuxrestart-guard
                     │  ① NAS 状态检查（负载/内存/磁盘/温度/端口）
-                    │     └→ notify 仓库 data.json（id=3 通知）
+                    │     └→ notify 仓库 data.json（id=1 通知）
                     │  ② power=true → 写回 false → 校验 → reboot
                     ▼
                 Linux 重启
@@ -27,7 +27,7 @@ NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把�
 - **token 只在服务端**：浏览器只访问 `/api/state`，拿不到任何凭据。
 - **写操作有口令**：`TOGGLE_PASSCODE` 未配置时写接口直接 503。
 - **单一部署**：页面与 API 全部由 Cloudflare Pages 提供（Git 集成部署），不用 GitHub Pages。
-- **每小时上报**：NAS 存活状态会写进 notify 页面（id=3 通知），同时避免其监控工作流误判「NAS 离线」。
+- **每小时上报**：NAS 存活状态会写进 notify 页面（id=1 通知），同时避免其监控工作流误判「NAS 离线」。
 
 ## 目录
 
@@ -118,7 +118,7 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 | `NOTIFY_ENABLED` | `1` | 是否每轮把 NAS 状态写进 notify 仓库 |
 | `NOTIFY_REPO` | `zzk6780051/notify` | 通知仓库 |
 | `NOTIFY_PATH` / `NOTIFY_BRANCH` | `data.json` / `main` | 通知文件与分支 |
-| `NOTIFY_ID` | `3` | 复用的通知条目 id（页面和监控工作流都读这条） |
+| `NOTIFY_ID` | `1` | 复用的通知条目 id（页面和监控工作流都读这条） |
 | `NOTIFY_TOKEN` | 回退到 `GITHUB_TOKEN` | 需要能写 notify 仓库 |
 | `NAS_NAME` | `hostname` | 通知里显示的机器名 |
 | `CHECK_MOUNTS` | `/,/vol1` | 要检查的磁盘挂载点 |

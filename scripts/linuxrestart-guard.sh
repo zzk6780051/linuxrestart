@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # linuxrestart-guard —— 每小时运行一次（cron），做两件事：
-#   1) 检查本机（NAS）状态：负载 / 内存 / 磁盘 / 温度 / 关键端口，把结果作为 id=3
+#   1) 检查本机（NAS）状态：负载 / 内存 / 磁盘 / 温度 / 关键端口，把结果作为 id=1
 #      的通知写入 notify 仓库的 data.json（NOTIFY_ENABLED=1 时），供「实时通知中心」展示；
 #   2) 检查 GitHub 仓库中的 state.json：power = true 时先把状态写回 false（记录
 #      last_reboot_at），校验通过后再重启本机。
@@ -44,7 +44,7 @@ CHECK_MOUNTS="${CHECK_MOUNTS:-/,/vol1}"
 CHECK_PORTS="${CHECK_PORTS:-22:SSH,2298:DSH,5667:fnOS}"
 DISK_WARN_PCT="${DISK_WARN_PCT:-90}"
 MEM_WARN_PCT="${MEM_WARN_PCT:-95}"
-NOTIFY_ID="${NOTIFY_ID:-3}"
+NOTIFY_ID="${NOTIFY_ID:-1}"
 
 MODE="run"
 for arg in "$@"; do

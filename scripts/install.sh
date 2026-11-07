@@ -42,12 +42,12 @@ DRY_RUN=0
 REBOOT_CMD=/sbin/reboot
 
 # ---- NAS 状态上报（notify 仓库）----
-# 1 = 每小时把本机状态写入 notify 仓库 data.json 中 id=3 的通知
+# 1 = 每小时把本机状态写入 notify 仓库 data.json 中 id=1 的通知
 NOTIFY_ENABLED=1
 NOTIFY_REPO=zzk6780051/notify
 NOTIFY_BRANCH=main
 NOTIFY_PATH=data.json
-NOTIFY_ID=3
+NOTIFY_ID=1
 # 通知里显示的机器名（默认 hostname）
 NAS_NAME=
 # 检查的磁盘挂载点（逗号分隔）与占用告警阈值
