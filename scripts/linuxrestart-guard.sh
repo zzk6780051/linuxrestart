@@ -311,8 +311,6 @@ nas_check() {
     NAS_OK=1
     NAS_TITLE="🟢 NAS 在线正常"
   fi
-  NAS_CONTENT+="<br>🤖 由 NAS 定时任务每小时自动上报"
-
   [ "$MODE" = "status" ] || log "NAS 检查完成: ok=${NAS_OK} ${NAS_SUMMARY}"
 }
 
@@ -405,7 +403,7 @@ notify_upsert() { # <title> <content>
 
 notify_reboot() {
   notify_upsert "🔄 NAS 即将重启" \
-    "🔄 收到远程重启指令 · $(now_beijing)<br><br>已从 GitHub 读取到 power=true 并写回 false，机器将在几秒内重启。<br><br>重启完成后，下一轮整点检查会自动上报「🟢 NAS 在线正常」。<br><br>🤖 由 NAS 定时任务上报" ||
+    "🔄 收到远程重启指令 · $(now_beijing)<br><br>已从 GitHub 读取到 power=true 并写回 false，机器将在几秒内重启。<br>🔄 重启计划: 已触发 — 本机马上重启<br><br>重启完成后，下一轮整点检查会自动上报「🟢 NAS 在线正常」。<br><br>🤖 由 NAS 定时任务上报" ||
     log "WARN: 重启前通知上报失败（不影响重启）"
 }
 
@@ -413,40 +411,59 @@ NAS_OK=1
 NAS_TITLE=""
 NAS_CONTENT=""
 NAS_SUMMARY=""
+POWER="unknown"
+UPDATED="-"
+LAST_REBOOT="-"
+
+# 重启计划行：根据 state.json 的 power 生成提示，并附下次检查时间
+build_reboot_plan() {
+  case "$POWER" in
+    true) REBOOT_PLAN_LINE="🔄 重启计划: 已开启 — 本机将在本轮检查中重启（约 1 小时内）" ;;
+    false) REBOOT_PLAN_LINE="⏸️ 重启计划: 未开启 — 不会重启" ;;
+    *) REBOOT_PLAN_LINE="❔ 重启计划: 未知 — 读取 state.json 失败" ;;
+  esac
+  local next_check
+  next_check="$(date -d '+1 hour' '+%H:00' 2>/dev/null || echo '下个整点')"
+  REBOOT_PLAN_LINE+="<br>⏰ 下次检查: ${next_check}（每小时整点）"
+}
+
+plan_plain() { printf '%s' "$REBOOT_PLAN_LINE" | sed 's/<br>/ ／ /g'; }
 
 # ---------------- 主流程 ----------------
 
-# 1) 先做 NAS 健康检查（本地采集，不依赖 GitHub）
+# 1) NAS 健康检查（本地采集）
 nas_check
 
-if [ "$MODE" = "check" ]; then
-  printf 'nas     : %s\n' "$([ "$NAS_OK" = "1" ] && echo ok || echo failed)"
-  printf 'detail  : %s\n' "$NAS_SUMMARY"
-  printf 'title   : %s\n' "$NAS_TITLE"
-  printf 'notify  : %s\n' "$([ "$NOTIFY_ENABLED" = "1" ] && echo "on ($NOTIFY_REPO)" || echo off)"
-  if [ "$NOTIFY_ENABLED" = "1" ] && [ "$DRY_RUN" != "1" ]; then
-    notify_upsert "$NAS_TITLE" "$NAS_CONTENT" && echo "上报    : ok" || echo "上报    : failed"
-  else
-    echo "上报    : skipped（DRY_RUN=1 或 NOTIFY_ENABLED=0）"
-  fi
-  exit 0
-fi
-
-# 2) 读取重启开关状态
-POWER="unknown"
+# 2) 读取重启开关状态（读取失败时仍会上报 NAS 状态）
 if fetch_state; then
   POWER="$(printf '%s' "$STATE_JSON" | jq -r 'if .power == true then "true" else "false" end')"
   UPDATED="$(printf '%s' "$STATE_JSON" | jq -r '.updated_at // "-"')"
   LAST_REBOOT="$(printf '%s' "$STATE_JSON" | jq -r '.last_reboot_at // "-"')"
 else
-  UPDATED="-"
-  LAST_REBOOT="-"
   log "WARN: 读取 state.json 失败，本次不做重启判断"
+fi
+
+build_reboot_plan
+NAS_CONTENT+="<br><br>${REBOOT_PLAN_LINE}<br>🤖 由 NAS 定时任务每小时自动上报"
+
+if [ "$MODE" = "check" ]; then
+  printf 'nas     : %s\n' "$([ "$NAS_OK" = "1" ] && echo ok || echo failed)"
+  printf 'detail  : %s\n' "$NAS_SUMMARY"
+  printf 'title   : %s\n' "$NAS_TITLE"
+  printf 'plan    : %s\n' "$(plan_plain)"
+  printf 'notify  : %s\n' "$([ "$NOTIFY_ENABLED" = "1" ] && echo "on ($NOTIFY_REPO)" || echo off)"
+  if [ "$NOTIFY_ENABLED" = "1" ] && [ "$DRY_RUN" != "1" ]; then
+    notify_upsert "$NAS_TITLE" "$NAS_CONTENT" && printf '上报    : ok\n' || printf '上报    : failed\n'
+  else
+    printf '上报    : skipped（DRY_RUN=1 或 NOTIFY_ENABLED=0）\n'
+  fi
+  exit 0
 fi
 
 if [ "$MODE" = "status" ]; then
   printf 'repo    : %s (%s)\n' "$GITHUB_REPO" "$BRANCH"
   printf 'power   : %s\n' "$POWER"
+  printf 'plan    : %s\n' "$(plan_plain)"
   printf 'updated : %s\n' "$UPDATED"
   printf 'reboot  : %s\n' "$LAST_REBOOT"
   printf 'dry_run : %s\n' "$DRY_RUN"
@@ -460,6 +477,8 @@ if [ "$POWER" = "true" ]; then
   log "检测到 power=true（updated_at=$UPDATED），开始写回关闭状态"
   if ! write_off; then
     log "写回失败，本次不重启；状态保持 power=true，等待下一轮检查"
+    log "state=power 未变，上报 NAS 状态（含重启计划）"
+    notify_upsert "$NAS_TITLE" "$NAS_CONTENT" || log "WARN: NAS 状态上报失败（不影响主流程）"
     exit 1
   fi
 
@@ -481,12 +500,11 @@ if [ "$POWER" = "true" ]; then
     log "ERROR: 重启命令不存在: $REBOOT_CMD"
     exit 1
   fi
-
   log "重启命令已提交"
   exit 0
 fi
 
-# 4) 状态为关闭：正常上报 NAS 状态
-log "state=off（updated_at=$UPDATED），上报 NAS 状态"
+# 4) 状态为关闭/未知：正常上报 NAS 状态（含是否将会重启）
+log "state=${POWER}（updated_at=$UPDATED），上报 NAS 状态"
 notify_upsert "$NAS_TITLE" "$NAS_CONTENT" || log "WARN: NAS 状态上报失败（不影响主流程）"
 exit 0

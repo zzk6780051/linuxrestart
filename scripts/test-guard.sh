@@ -145,39 +145,46 @@ out="$(DRY_RUN=0 bash "$GUARD" --status)"
 echo "$out" | grep -q 'power   : true' && { PASS=$((PASS + 1)); echo "  ok - 状态读取 power=true"; } || { echo "  FAIL - 状态读取"; FAILED=1; }
 echo "$out" | grep -q 'nas     : ok' && { PASS=$((PASS + 1)); echo "  ok - 显示 NAS 检查结果"; } || { echo "  FAIL - NAS 状态行"; FAILED=1; }
 
-echo "2) --dry-run：写回 false 但不重启、不上报"
+echo "2) --check：上报内容包含重启计划"
+CHECK_PORTS="2298:DSH" DRY_RUN=0 bash "$GUARD" --check >"$WORK/check.out"
+check "上报内容包含「重启计划: 已开启」" bash -c 'jq -r ".notify.notifications[] | select(.id==1) | .content" "$0" | grep -q "重启计划: 已开启"' "$WORK/result.json"
+check "上报内容包含下次检查时间" bash -c 'jq -r ".notify.notifications[] | select(.id==1) | .content" "$0" | grep -q "下次检查"' "$WORK/result.json"
+
+echo "3) --dry-run：写回 false 但不重启、不上报"
+before_notify="$(notify_put_count)"
 DRY_RUN=1 bash "$GUARD"
 check "state.json 已写回 power=false" bash -c 'jq -e ".state.power == false" "$0" >/dev/null' "$WORK/result.json"
 check "dry-run 不记录 last_reboot_at" bash -c 'jq -e ".state.last_reboot_at == null" "$0" >/dev/null' "$WORK/result.json"
 check "updated_by=cron-dry-run" bash -c 'jq -e ".state.updated_by == \"cron-dry-run\"" "$0" >/dev/null' "$WORK/result.json"
 check "日志包含 DRY_RUN 跳过" grep -q 'DRY_RUN=1' "$WORK/guard.log"
-check "dry-run 不上报通知" test "$(notify_put_count)" = "0"
+check "dry-run 不上报通知" test "$before_notify" = "$(notify_put_count)"
 
-echo "3) state=off 时正常上报 NAS 在线状态"
+echo "4) state=off 时正常上报 NAS 在线状态"
 before_state="$(state_put_count)"
 DRY_RUN=0 bash "$GUARD"
 check "不产生 state 写回" test "$before_state" = "$(state_put_count)"
 check "通知 id=1 标题为在线正常" bash -c 'jq -e ".notify.notifications[] | select(.id==1) | .title == \"🟢 NAS 在线正常\"" "$0" >/dev/null' "$WORK/result.json"
 check "通知日期为北京时间格式" bash -c 'jq -r ".notify.notifications[] | select(.id==1) | .date" "$0" | grep -Eq "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}$"' "$WORK/result.json"
 check "日志包含已上报" grep -q '已上报 NAS 状态' "$WORK/guard.log"
+check "重启计划显示「未开启」" bash -c 'jq -r ".notify.notifications[] | select(.id==1) | .content" "$0" | grep -q "重启计划: 未开启"' "$WORK/result.json"
 
-echo "4) --check 且端口不可达 -> 异常通知"
+echo "5) --check 且端口不可达 -> 异常通知"
 before_notify="$(notify_put_count)"
 CHECK_PORTS="1:DeadPort" DRY_RUN=0 bash "$GUARD" --check >"$WORK/check.out"
 check "上报次数 +1" test "$((before_notify + 1))" = "$(notify_put_count)"
 check "标题为异常" bash -c 'jq -e ".notify.notifications[] | select(.id==1) | .title == \"🔴 NAS 状态异常\"" "$0" >/dev/null' "$WORK/result.json"
 check "内容包含端口不可达" bash -c 'jq -r ".notify.notifications[] | select(.id==1) | .content" "$0" | grep -q "端口不可达"' "$WORK/result.json"
 
-echo "5) NOTIFY_ENABLED=0 时不上报"
+echo "6) NOTIFY_ENABLED=0 时不上报"
 before_notify="$(notify_put_count)"
 NOTIFY_ENABLED=0 DRY_RUN=0 bash "$GUARD" --check >/dev/null
 check "关闭后上报次数不变" test "$before_notify" = "$(notify_put_count)"
 
-echo "6) --check --dry-run 不上报"
+echo "7) --check --dry-run 不上报"
 CHECK_PORTS="2298:DSH" DRY_RUN=1 bash "$GUARD" --check >/dev/null
 check "dry-run 不上报" test "$before_notify" = "$(notify_put_count)"
 
-echo "7) 缺少 token 时静默退出"
+echo "8) 缺少 token 时静默退出"
 GITHUB_TOKEN="" NOTIFY_TOKEN="" bash "$GUARD"
 check "缺少 token 记录 skip" grep -q 'GITHUB_TOKEN 未配置' "$WORK/guard.log"
 

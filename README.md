@@ -88,7 +88,7 @@ GitHub → Settings → Developer settings → **Fine-grained tokens** → Gener
 sudo bash scripts/install.sh
 ```
 
-会安装：
+会安装（每小时整点执行，重启检查 + NAS 状态上报）：
 
 - `/usr/local/sbin/linuxrestart-guard`
 - `/etc/linuxrestart/linuxrestart.env`（权限 600，仅 root 可读）
@@ -126,7 +126,9 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 | `MEM_WARN_PCT` | `95` | 内存占用超过该值判为异常 |
 | `CHECK_PORTS` | `22:SSH,2298:DSH,5667:fnOS` | 要检查的端口（端口:名称） |
 
-上报内容：运行时长、1/5/15 分钟负载、内存占用、各磁盘占用、CPU 温度、各端口连通性；
+上报内容：运行时长、1/5/15 分钟负载、内存占用、各磁盘占用、CPU 温度、各端口连通性，
+以及**是否将会重启**（`⏸️ 重启计划: 未开启 — 不会重启` / `🔄 重启计划: 已开启 — 本机将在本轮检查中重启`
+/ `❔ 重启计划: 未知`）和下次检查时间；
 有任何端口不可达或磁盘/内存超阈值时，标题变为「🔴 NAS 状态异常」并列出异常项。
 触发重启时会先上报「🔄 NAS 即将重启」，重启后下一轮再报「🟢 NAS 在线正常」。
 
@@ -169,7 +171,7 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 
 ```sh
 node scripts/test-api.mjs      # API 逻辑（mock GitHub，9 项）
-bash scripts/test-guard.sh     # 守护脚本 + NAS 上报（mock GitHub，17 项）
+bash scripts/test-guard.sh     # 守护脚本 + NAS 上报（mock GitHub，20 项）
 ```
 
 ## 八、卸载
