@@ -88,7 +88,7 @@ GitHub → Settings → Developer settings → **Fine-grained tokens** → Gener
 sudo bash scripts/install.sh
 ```
 
-会安装（每小时整点执行，重启检查 + NAS 状态上报）：
+会安装（每小时整点执行，重启检查 + NAS 状态上报；另加一条 `@reboot`，每次开机后自动上报一次 NAS 状态）：
 
 - `/usr/local/sbin/linuxrestart-guard`
 - `/etc/linuxrestart/linuxrestart.env`（权限 600，仅 root 可读）
@@ -130,6 +130,12 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 以及**是否将会重启**（`⏸️ 重启计划: 未开启 — 不会重启` / `🔄 重启计划: 已开启 — 本机将在本轮检查中重启`
 / `❔ 重启计划: 未知`）和下次检查时间；
 有任何端口不可达或磁盘/内存超阈值时，标题变为「🔴 NAS 状态异常」并列出异常项。
+
+另外，网页开关被打开/关闭的**那一刻**，Cloudflare Pages Function 也会立即把重启状态写进同一条通知
+（「🔄 重启开关已开启 … 约 1 小时内重启」/「⏸️ 重启开关已关闭 …」），不用等下一次整点检查；
+NAS 重启完成开机后，`@reboot` 的 `--boot` 会等网络就绪再自动跑一次检查，尽快把页面刷新成「🟢 NAS 在线正常」。
+Function 里相关环境变量（都有默认值，通常不必配）：`NOTIFY_ENABLED`、`NOTIFY_TOKEN`、`NOTIFY_REPO`、
+`NOTIFY_BRANCH`、`NOTIFY_PATH`、`NOTIFY_ID`。
 触发重启时会先上报「🔄 NAS 即将重启」，重启后下一轮再报「🟢 NAS 在线正常」。
 
 真实测试：网页打开开关 → 等下一次整点（或手动执行一次守护脚本）→ 机器重启，

@@ -14,6 +14,7 @@
 #   linuxrestart-guard --check     只做 NAS 健康检查/上报
 #   linuxrestart-guard --dry-run   只做检查/写回，不真正重启（也不上报通知）
 #   linuxrestart-guard --status    只打印当前状态
+#   linuxrestart-guard --boot      开机后（@reboot）先等待网络就绪，再跑一次 --check（失败自动重试）
 #
 set -uo pipefail
 
@@ -46,11 +47,17 @@ DISK_WARN_PCT="${DISK_WARN_PCT:-90}"
 MEM_WARN_PCT="${MEM_WARN_PCT:-95}"
 NOTIFY_ID="${NOTIFY_ID:-1}"
 
+# ---- 开机检查（@reboot 时运行 --boot）----
+BOOT_WAIT="${BOOT_WAIT:-30}"          # 开机后等待网络就绪的秒数
+BOOT_RETRIES="${BOOT_RETRIES:-5}"     # 检查失败的重试次数
+BOOT_RETRY_WAIT="${BOOT_RETRY_WAIT:-60}"  # 每次重试间隔秒数
+
 MODE="run"
 for arg in "$@"; do
   case "$arg" in
     --status | -s) MODE="status" ;;
     --check | -c) MODE="check" ;;
+    --boot | -b) MODE="boot" ;;
     --dry-run | -n) DRY_RUN=1 ;;
     --help | -h)
       sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'
@@ -89,7 +96,7 @@ cleanup_tmp() {
 }
 trap cleanup_tmp EXIT
 
-if [ "$MODE" != "status" ]; then
+if [ "$MODE" != "status" ] && [ "$MODE" != "boot" ]; then
   mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
   # 日志超过 512KB 时滚动一份，避免无限增长
   if [ -f "$LOG_FILE" ] && [ "$(stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)" -gt 524288 ]; then
@@ -103,6 +110,28 @@ if [ "$MODE" != "status" ]; then
     log "跳过：已有实例在运行"
     exit 0
   fi
+fi
+
+# ---------------- 开机检查（每次重启后自动跑一次）----------------
+# cron @reboot 调用 --boot：先等网络，再以 --check 上报 NAS 状态；失败自动重试。
+if [ "$MODE" = "boot" ]; then
+  log "开机检查：等待 ${BOOT_WAIT}s 让网络就绪"
+  sleep "$BOOT_WAIT"
+  attempt=0
+  while [ "$attempt" -lt "$BOOT_RETRIES" ]; do
+    attempt=$((attempt + 1))
+    log "开机检查：第 ${attempt}/${BOOT_RETRIES} 次"
+    if "$0" --check >>"$LOG_FILE" 2>&1; then
+      log "开机检查完成（第 ${attempt} 次）"
+      exit 0
+    fi
+    if [ "$attempt" -lt "$BOOT_RETRIES" ]; then
+      log "开机检查失败，${BOOT_RETRY_WAIT}s 后重试"
+      sleep "$BOOT_RETRY_WAIT"
+    fi
+  done
+  log "WARN: 开机检查多次失败，放弃（下一次整点 cron 检查仍会执行）"
+  exit 0
 fi
 
 STATE_URL="$API_BASE/repos/$GITHUB_REPO/contents/$STATE_PATH"
@@ -453,10 +482,14 @@ if [ "$MODE" = "check" ]; then
   printf 'plan    : %s\n' "$(plan_plain)"
   printf 'notify  : %s\n' "$([ "$NOTIFY_ENABLED" = "1" ] && echo "on ($NOTIFY_REPO)" || echo off)"
   if [ "$NOTIFY_ENABLED" = "1" ] && [ "$DRY_RUN" != "1" ]; then
-    notify_upsert "$NAS_TITLE" "$NAS_CONTENT" && printf '上报    : ok\n' || printf '上报    : failed\n'
-  else
-    printf '上报    : skipped（DRY_RUN=1 或 NOTIFY_ENABLED=0）\n'
+    if notify_upsert "$NAS_TITLE" "$NAS_CONTENT"; then
+      printf '上报    : ok\n'
+      exit 0
+    fi
+    printf '上报    : failed\n'
+    exit 1
   fi
+  printf '上报    : skipped（DRY_RUN=1 或 NOTIFY_ENABLED=0）\n'
   exit 0
 fi
 

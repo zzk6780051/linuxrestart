@@ -11,9 +11,19 @@
  *   GITHUB_BRANCH     默认 main
  *   STATE_PATH        默认 state.json
  *   ALLOWED_ORIGINS   CORS 白名单，默认 *
+ *
+ * 开关状态变化时，还会把「重启状态」写到 notify 仓库的通知里（可选，默认开启）：
+ *   NOTIFY_ENABLED    默认 1；设 0 关闭
+ *   NOTIFY_TOKEN      默认复用 GITHUB_TOKEN（需有 notify 仓库 Contents: Read and write）
+ *   NOTIFY_REPO       默认 zzk6780051/notify
+ *   NOTIFY_BRANCH     默认 main
+ *   NOTIFY_PATH       默认 data.json
+ *   NOTIFY_ID         默认 1（NAS 状态通知的 id）
  */
 
 const API = "https://api.github.com";
+// 用于确认 Cloudflare 部署版本是否生效（GET 响应里带 version 字段）
+const FUNCTION_VERSION = "2-notify-toggle";
 
 function cors(env) {
   return {
@@ -118,6 +128,64 @@ function readStatePayload(fetched) {
   }
 }
 
+function notifyConfig(env) {
+  if (String(env.NOTIFY_ENABLED ?? "1") === "0") return null;
+  const token = env.NOTIFY_TOKEN || env.GITHUB_TOKEN;
+  if (!token) return null;
+  return {
+    token,
+    repo: env.NOTIFY_REPO || "zzk6780051/notify",
+    branch: env.NOTIFY_BRANCH || "main",
+    path: (env.NOTIFY_PATH || "data.json").replace(/^\/+/, ""),
+    id: Number(env.NOTIFY_ID || 1)
+  };
+}
+
+function beijingStamp() {
+  return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19);
+}
+
+const REBOOT_ON_TEXT =
+  "🔄 网页开关已开启 · __TIME__<br><br>已把重启请求写入 state.json，等待 NAS 定时任务执行。<br>" +
+  "🔄 重启计划: 已开启 — 约 1 小时内重启本机<br><br>如需取消，请在页面上关闭开关，本轮就不会重启。<br>" +
+  "🤖 由网页开关自动上报";
+const REBOOT_OFF_TEXT =
+  "⏸️ 网页开关已关闭 · __TIME__<br><br>已取消重启计划，本轮不会重启。<br>" +
+  "🔄 重启计划: 未开启 — 不会重启<br><br>🤖 由网页开关自动上报";
+
+async function notifyUpsert(env, cfg, title, content) {
+  const n = notifyConfig(env);
+  if (!n) return { skipped: true };
+  const ncfg = { ...cfg, token: n.token, repo: n.repo, branch: n.branch, path: n.path };
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const fetched = await ghGet(ncfg);
+    if (fetched.error) return { error: fetched.error };
+    let raw = {};
+    if (!fetched.missing) {
+      try {
+        raw = JSON.parse(decodeBase64(fetched.data.content || "")) || {};
+      } catch (err) {
+        return { error: "notify data.json 不是合法 JSON: " + err.message };
+      }
+    }
+    const list = Array.isArray(raw.notifications) ? raw.notifications.slice() : [];
+    const item = { id: n.id, title, content, date: beijingStamp() };
+    const idx = list.findIndex((x) => x && Number(x.id) === n.id);
+    if (idx >= 0) list[idx] = { ...list[idx], ...item };
+    else list.push(item);
+    const next = { ...raw, notifications: list };
+    const res = await ghPut(ncfg, JSON.stringify(next, null, 2) + "\n", fetched.sha, `linuxrestart: ${title}`);
+    if (res.ok) return { ok: true };
+    if (res.status === 409 || res.status === 422) {
+      await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));
+      continue;
+    }
+    const detail = await res.text().catch(() => "");
+    return { error: `GitHub PUT ${res.status}`, detail: detail.slice(0, 300) };
+  }
+  return { error: "conflict" };
+}
+
 export async function onRequestGet({ env }) {
   const cfg = config(env);
   if (!cfg) {
@@ -131,7 +199,7 @@ export async function onRequestGet({ env }) {
     const raw = readStatePayload(fetched);
     const data = normalize(raw, fetched.sha);
     if (fetched.missing) data.missing = true;
-    return reply(env, data);
+    return reply(env, { ...data, version: FUNCTION_VERSION });
   } catch (err) {
     return reply(env, { error: "internal", message: err.message || String(err) }, 500);
   }
@@ -171,6 +239,7 @@ export async function onRequestPost({ request, env }) {
         return reply(env, { error: "github_error", message: fetched.error, detail: fetched.detail }, 502);
       }
       const raw = readStatePayload(fetched);
+      const prevPower = raw.power === true;
       const now = new Date().toISOString();
       const next = {
         ...raw,
@@ -186,7 +255,19 @@ export async function onRequestPost({ request, env }) {
       );
       if (res.ok) {
         const saved = await res.json();
-        return reply(env, { ok: true, state: normalize(next, saved?.content?.sha) });
+        let notify = "skipped";
+        if (body.power !== prevPower) {
+          try {
+            const stamp = beijingStamp();
+            const result = body.power
+              ? await notifyUpsert(env, cfg, "🔄 重启开关已开启", REBOOT_ON_TEXT.replace("__TIME__", stamp))
+              : await notifyUpsert(env, cfg, "⏸️ 重启开关已关闭", REBOOT_OFF_TEXT.replace("__TIME__", stamp));
+            notify = result.ok ? "ok" : result.skipped ? "skipped" : "failed";
+          } catch (err) {
+            notify = "failed";
+          }
+        }
+        return reply(env, { ok: true, state: normalize(next, saved?.content?.sha), notify });
       }
       if (res.status === 409 || res.status === 422) {
         await new Promise((r) => setTimeout(r, 200 * (attempt + 1)));

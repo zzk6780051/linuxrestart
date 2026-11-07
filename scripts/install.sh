@@ -4,6 +4,7 @@
 #   - /usr/local/sbin/linuxrestart-guard            守护脚本（重启检查 + NAS 状态上报）
 #   - /etc/linuxrestart/linuxrestart.env            密钥与配置（600，root only）
 #   - /etc/cron.d/linuxrestart                      每小时整点执行一次
+#   - /etc/cron.d/linuxrestart-boot                 每次开机（@reboot）自动上报一次 NAS 状态
 #
 # 用法： sudo ./scripts/install.sh
 #
@@ -20,6 +21,7 @@ GUARD_DST="/usr/local/sbin/linuxrestart-guard"
 ENV_DIR="/etc/linuxrestart"
 ENV_FILE="$ENV_DIR/linuxrestart.env"
 CRON_FILE="/etc/cron.d/linuxrestart"
+BOOT_CRON_FILE="/etc/cron.d/linuxrestart-boot"
 
 echo "==> 安装守护脚本到 $GUARD_DST"
 install -d -m 755 /usr/local/sbin
@@ -56,6 +58,11 @@ DISK_WARN_PCT=90
 # 检查的端口（端口:名称，逗号分隔）
 CHECK_PORTS=22:SSH,2298:DSH,5667:fnOS
 MEM_WARN_PCT=95
+# ---- 开机检查（@reboot）----
+# 开机后等待网络就绪的秒数，及失败重试次数/间隔
+BOOT_WAIT=30
+BOOT_RETRIES=5
+BOOT_RETRY_WAIT=60
 EOF
   chmod 600 "$ENV_FILE"
   echo "    已创建 $ENV_FILE（请填入 GITHUB_TOKEN）"
@@ -71,6 +78,14 @@ PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 0 * * * * root /usr/local/sbin/linuxrestart-guard
 EOF
 chmod 644 "$CRON_FILE"
+
+echo "==> 安装开机检查 cron（每次重启后自动上报一次）"
+cat >"$BOOT_CRON_FILE" <<'EOF'
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+@reboot root /usr/local/sbin/linuxrestart-guard --boot
+EOF
+chmod 644 "$BOOT_CRON_FILE"
 
 echo "==> 检查日志文件"
 install -m 640 /dev/null /var/log/linuxrestart.log
@@ -97,5 +112,6 @@ echo "完成。下一步："
 echo "  1) 编辑 $ENV_FILE 填入 GITHUB_TOKEN（Contents: Read and write）"
 echo "  2) 联调： $GUARD_DST --status"
 echo "  3) 联调： $GUARD_DST --check     （只做 NAS 检查/上报）"
+echo "     联调： $GUARD_DST --boot      （模拟开机检查，会先等待 BOOT_WAIT 秒）"
 echo "  4) 联调： $GUARD_DST --dry-run   （只写回不重启、不上报）"
 echo "  5) 确认无误后把 DRY_RUN 改成 0，并触发一次真实测试"

@@ -188,6 +188,10 @@ echo "8) 缺少 token 时静默退出"
 GITHUB_TOKEN="" NOTIFY_TOKEN="" bash "$GUARD"
 check "缺少 token 记录 skip" grep -q 'GITHUB_TOKEN 未配置' "$WORK/guard.log"
 
+echo "9) --boot：开机后自动检查一次"
+BOOT_WAIT=0 BOOT_RETRIES=2 BOOT_RETRY_WAIT=0 DRY_RUN=1 bash "$GUARD" --boot
+check "日志记录开机检查完成" grep -q '开机检查完成' "$WORK/guard.log"
+
 echo
 if [ -n "${FAILED:-}" ]; then
   echo "有测试失败"
