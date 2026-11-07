@@ -167,11 +167,11 @@ write_off() {
       continue
     }
     if [ "$code" = "200" ] || [ "$code" = "201" ]; then
-      # 校验写回内容确实是 false
-      local saved
-      saved="$(jq -r '.content.content // empty' "$TMP_BODY" | tr -d '\n' | base64 -d 2>/dev/null)"
-      if [ -n "$saved" ] && printf '%s' "$saved" | jq -e '.power == false' >/dev/null 2>&1; then
-        log "已将 state.json 的 power 写回 false（commit ${STATE_SHA:-new}）"
+      local commit_sha
+      commit_sha="$(jq -r '.commit.sha // "-"' "$TMP_BODY" 2>/dev/null)"
+      # GitHub 的 PUT 响应里 content 对象不含文件内容，必须重新 GET 校验
+      if fetch_state && [ "$(printf '%s' "$STATE_JSON" | jq -r 'if .power == true then "true" else "false" end' 2>/dev/null)" != "true" ]; then
+        log "已将 state.json 的 power 写回 false 并校验通过（commit ${commit_sha:-unknown}）"
         return 0
       fi
       log "ERROR: 写回后校验失败，放弃重启"
