@@ -102,8 +102,8 @@ echo "2) --dry-run：写回 false 但不重启"
 DRY_RUN=1 bash "$GUARD"
 cat "$WORK/result.json" >/dev/null 2>&1
 check "state.json 已写回 power=false" bash -c 'jq -e ".state.power == false" "$0" >/dev/null' "$WORK/result.json"
-check "记录了 last_reboot_at" bash -c 'jq -e ".state.last_reboot_at != null" "$0" >/dev/null' "$WORK/result.json"
-check "updated_by=cron" bash -c 'jq -e ".state.updated_by == \"cron\"" "$0" >/dev/null' "$WORK/result.json"
+check "dry-run 不记录 last_reboot_at" bash -c 'jq -e ".state.last_reboot_at == null" "$0" >/dev/null' "$WORK/result.json"
+check "updated_by=cron-dry-run" bash -c 'jq -e ".state.updated_by == \"cron-dry-run\"" "$0" >/dev/null' "$WORK/result.json"
 check "日志包含 DRY_RUN 跳过" grep -q 'DRY_RUN=1' "$WORK/guard.log"
 
 echo "3) 再次运行：状态为 off，不做写回"

@@ -150,14 +150,16 @@ write_off() {
     if ! fetch_state; then
       return 1
     fi
-    new_json="$(printf '%s' "$STATE_JSON" | jq -c --arg ts "$ts" \
-      '. + {power: false, updated_at: $ts, updated_by: "cron", last_reboot_at: $ts}')" || {
+    local last_at="" actor="cron"
+    if [ "$DRY_RUN" = "1" ]; then actor="cron-dry-run"; else last_at="$ts"; fi
+    new_json="$(printf '%s' "$STATE_JSON" | jq -c --arg ts "$ts" --arg last "$last_at" --arg who "$actor" \
+      '. + {power: false, updated_at: $ts, updated_by: $who, last_reboot_at: (if $last == "" then null else $last end)}')" || {
       log "ERROR: 生成新状态失败"
       return 1
     }
     new_b64="$(printf '%s' "$new_json" | base64 -w0)"
     payload="$(jq -n -c \
-      --arg message "linuxrestart: reboot executed on $(hostname) at $ts" \
+      --arg message "linuxrestart: $([ "$DRY_RUN" = "1" ] && echo dry-run || echo reboot) on $(hostname) at $ts" \
       --arg content "$new_b64" \
       --arg sha "$STATE_SHA" \
       --arg branch "$BRANCH" \
