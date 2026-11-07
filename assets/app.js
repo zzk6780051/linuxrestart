@@ -2,8 +2,7 @@
   "use strict";
 
   var cfg = window.LINUXRESTART_CONFIG || {};
-  var isGitHubPages = /\.github\.io$/i.test(location.hostname);
-  var base = ((isGitHubPages ? cfg.apiBaseOnGitHubPages : cfg.apiBase) || "").replace(/\/+$/, "");
+  var base = (cfg.apiBase || "").replace(/\/+$/, "");
   var apiUrl = base + "/api/state";
   var PASS_KEY = "linuxrestart.passcode";
   var REFRESH_MS = 60000;
@@ -30,7 +29,7 @@
   var toastTimer = 0;
   var pendingPower = null;
 
-  els.mode.textContent = isGitHubPages ? "GitHub Pages" : (base ? "自定义 API" : "Cloudflare Pages");
+  els.mode.textContent = base ? "自定义 API" : "Cloudflare Pages";
 
   function passcode() {
     try { return localStorage.getItem(PASS_KEY) || ""; } catch (e) { return ""; }
@@ -99,8 +98,8 @@
     try { data = await res.json(); } catch (e) { data = null; }
     if (!res.ok) {
       var msg = (data && data.message) || ("API 返回 HTTP " + res.status);
-      if (res.status === 404 && isGitHubPages) {
-        msg = "GitHub Pages 不支持服务端函数，请在 assets/config.js 配置 apiBaseOnGitHubPages";
+      if (res.status === 404) {
+        msg = "API 不存在：请确认页面由 Cloudflare Pages（Git 集成部署）提供，Functions 才会生效";
       }
       renderError(msg);
       throw new Error(msg);

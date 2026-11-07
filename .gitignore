@@ -8,3 +8,6 @@ node_modules/
 
 # 系统日志
 *.log
+
+# 本地临时 token 文件（不要提交）
+.gh_token
