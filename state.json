@@ -1,1 +1,6 @@
-{"power":false,"updated_at":"2026-11-07T17:13:59Z","updated_by":"shape-test","last_reboot_at":"2026-11-07T17:13:59Z"}
+{
+  "power": true,
+  "updated_at": "2026-11-07T17:15:28Z",
+  "updated_by": "e2e-test",
+  "last_reboot_at": null
+}
