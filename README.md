@@ -1,7 +1,9 @@
 # Linux Restart
 
 一个「远程重启开关」：网页上只有一个按钮，开关状态写入 GitHub 仓库里的 `state.json`；
-NAS 上的定时任务每 2 小时检查一次，若为开启状态则**先把状态写回关闭，再重启本机**。
+NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把状态写回关闭，再重启本机**。
+同一个定时任务还会每小时检查一次 NAS 状态，并写入 [notify 仓库](https://github.com/zzk6780051/notify)
+`data.json` 的 `id=3` 通知（「实时通知中心」页面展示）。
 
 ```
        浏览器（Cloudflare Pages）
@@ -13,8 +15,10 @@ NAS 上的定时任务每 2 小时检查一次，若为开启状态则**先把�
         GitHub 仓库 state.json  {"power": true}
                     │
                     ▼
-   NAS cron（每 2 小时） linuxrestart-guard
-                    │  power=true → 写回 false → 校验 → reboot
+   NAS cron（每小时） linuxrestart-guard
+                    │  ① NAS 状态检查（负载/内存/磁盘/温度/端口）
+                    │     └→ notify 仓库 data.json（id=3 通知）
+                    │  ② power=true → 写回 false → 校验 → reboot
                     ▼
                 Linux 重启
 ```
@@ -23,6 +27,7 @@ NAS 上的定时任务每 2 小时检查一次，若为开启状态则**先把�
 - **token 只在服务端**：浏览器只访问 `/api/state`，拿不到任何凭据。
 - **写操作有口令**：`TOGGLE_PASSCODE` 未配置时写接口直接 503。
 - **单一部署**：页面与 API 全部由 Cloudflare Pages 提供（Git 集成部署），不用 GitHub Pages。
+- **每小时上报**：NAS 存活状态会写进 notify 页面（id=3 通知），同时避免其监控工作流误判「NAS 离线」。
 
 ## 目录
 
@@ -31,7 +36,7 @@ NAS 上的定时任务每 2 小时检查一次，若为开启状态则**先把�
 | `index.html` / `assets/` | 开关页面（纯静态） |
 | `functions/api/state.js` | Cloudflare Pages Function：读写 GitHub 状态文件 |
 | `state.json` | 开关状态（由页面/守护脚本提交更新） |
-| `scripts/linuxrestart-guard.sh` | NAS 端守护脚本（cron 每 2 小时执行） |
+| `scripts/linuxrestart-guard.sh` | NAS 端守护脚本（cron 每小时执行，含 NAS 状态上报） |
 | `scripts/install.sh` | 安装脚本（写 cron、日志、配置模板） |
 | `scripts/test-api.mjs` | API 逻辑单测（mock GitHub） |
 | `scripts/test-guard.sh` | 守护脚本 dry-run 测试（mock GitHub） |
@@ -87,7 +92,7 @@ sudo bash scripts/install.sh
 
 - `/usr/local/sbin/linuxrestart-guard`
 - `/etc/linuxrestart/linuxrestart.env`（权限 600，仅 root 可读）
-- `/etc/cron.d/linuxrestart`：`0 */2 * * * root /usr/local/sbin/linuxrestart-guard`
+- `/etc/cron.d/linuxrestart`：`0 * * * * root /usr/local/sbin/linuxrestart-guard`（每小时整点）
 - `/var/log/linuxrestart.log` + logrotate
 
 然后填入 token（与 Cloudflare 里的可以用同一个）：
@@ -100,17 +105,37 @@ sudo vi /etc/linuxrestart/linuxrestart.env
 联调（**建议先把 DRY_RUN 保持 1**）：
 
 ```sh
-sudo /usr/local/sbin/linuxrestart-guard --status     # 查看当前状态
-sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重启
+sudo /usr/local/sbin/linuxrestart-guard --status     # 查看开关 + NAS 状态
+sudo /usr/local/sbin/linuxrestart-guard --check      # 只做 NAS 检查并上报 notify
+sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重启、不上报
 # 确认无误后把 DRY_RUN 改为 0
 ```
+
+### NAS 状态上报配置（`/etc/linuxrestart/linuxrestart.env`）
+
+| 变量 | 默认 | 说明 |
+| --- | --- | --- |
+| `NOTIFY_ENABLED` | `1` | 是否每轮把 NAS 状态写进 notify 仓库 |
+| `NOTIFY_REPO` | `zzk6780051/notify` | 通知仓库 |
+| `NOTIFY_PATH` / `NOTIFY_BRANCH` | `data.json` / `main` | 通知文件与分支 |
+| `NOTIFY_ID` | `3` | 复用的通知条目 id（页面和监控工作流都读这条） |
+| `NOTIFY_TOKEN` | 回退到 `GITHUB_TOKEN` | 需要能写 notify 仓库 |
+| `NAS_NAME` | `hostname` | 通知里显示的机器名 |
+| `CHECK_MOUNTS` | `/,/vol1` | 要检查的磁盘挂载点 |
+| `DISK_WARN_PCT` | `90` | 磁盘占用超过该值判为异常 |
+| `MEM_WARN_PCT` | `95` | 内存占用超过该值判为异常 |
+| `CHECK_PORTS` | `22:SSH,2298:DSH,5667:fnOS` | 要检查的端口（端口:名称） |
+
+上报内容：运行时长、1/5/15 分钟负载、内存占用、各磁盘占用、CPU 温度、各端口连通性；
+有任何端口不可达或磁盘/内存超阈值时，标题变为「🔴 NAS 状态异常」并列出异常项。
+触发重启时会先上报「🔄 NAS 即将重启」，重启后下一轮再报「🟢 NAS 在线正常」。
 
 真实测试：网页打开开关 → 等下一次整点（或手动执行一次守护脚本）→ 机器重启，
 `state.json` 变为 `false` 且 `last_reboot_at` 有值。
 
 ## 四、使用
 
-- **打开开关**：确认弹窗后写入 `power: true`，最多 2 小时内重启；
+- **打开开关**：确认弹窗后写入 `power: true`，最多 1 小时内重启；
   页面上会显示「已开启 · 等待定时任务执行重启」。
 - **取消**：在定时任务执行前再点一次，写回 `power: false`。
 - 页面每 60 秒自动刷新状态；也可点「刷新状态」。
@@ -123,6 +148,8 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 - 任何人都能读取状态（GET 不鉴权）；不希望公开展示可把仓库改为 private（Pages 仍可构建），
   或加 Cloudflare Access。
 - token 一旦泄露（例如贴进聊天记录）应立即在 GitHub 吊销并重新生成。
+- 若把 token 换成 fine-grained PAT，需要同时勾选 `linuxrestart` 和 `notify` 两个仓库的
+  `Contents: Read and write`（或单独给 `NOTIFY_TOKEN` 配一个只有 notify 权限的 token）。
 
 ## 六、排错
 
@@ -133,6 +160,8 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 | 页面 404 `/api/state` | 部署方式不是 Git 集成的 Pages，或 `dist` 里缺 `_routes.json` |
 | 提示 `GitHub PUT 409` | 并发写冲突，页面会自动重试 3 次；仍失败可刷新后重试 |
 | cron 没执行 | `systemctl status cron`；看 `/var/log/linuxrestart.log` |
+| notify 页面没更新 | `grep '已上报 NAS 状态' /var/log/linuxrestart.log`；检查 `NOTIFY_*` 配置和 token 是否有 notify 仓库写权限 |
+| 通知内容一直不变 | 确认 `NOTIFY_ENABLED=1` 且 `NOTIFY_ID` 与实际条目 id 一致 |
 | 日志 `GITHUB_TOKEN 未配置` | 编辑 `/etc/linuxrestart/linuxrestart.env` |
 | 重启没有发生 | 检查 `DRY_RUN` 是否为 0；`REBOOT_CMD` 是否存在；是否有 power 权限（root） |
 
@@ -140,7 +169,7 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 
 ```sh
 node scripts/test-api.mjs      # API 逻辑（mock GitHub，9 项）
-bash scripts/test-guard.sh     # 守护脚本 dry-run（mock GitHub，7 项）
+bash scripts/test-guard.sh     # 守护脚本 + NAS 上报（mock GitHub，17 项）
 ```
 
 ## 八、卸载

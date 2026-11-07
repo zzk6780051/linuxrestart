@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# 在本机（NAS）安装 linuxrestart 定时任务：
-#   - /usr/local/sbin/linuxrestart-guard            守护脚本
+# 在本机（NAS）安装 linuxrestart 定时任务（每小时执行一次）：
+#   - /usr/local/sbin/linuxrestart-guard            守护脚本（重启检查 + NAS 状态上报）
 #   - /etc/linuxrestart/linuxrestart.env            密钥与配置（600，root only）
-#   - /etc/cron.d/linuxrestart                      每 2 小时执行一次
+#   - /etc/cron.d/linuxrestart                      每小时整点执行一次
 #
 # 用法： sudo ./scripts/install.sh
 #
@@ -40,6 +40,22 @@ STATE_PATH=state.json
 DRY_RUN=0
 # 重启命令，默认 /sbin/reboot
 REBOOT_CMD=/sbin/reboot
+
+# ---- NAS 状态上报（notify 仓库）----
+# 1 = 每小时把本机状态写入 notify 仓库 data.json 中 id=3 的通知
+NOTIFY_ENABLED=1
+NOTIFY_REPO=zzk6780051/notify
+NOTIFY_BRANCH=main
+NOTIFY_PATH=data.json
+NOTIFY_ID=3
+# 通知里显示的机器名（默认 hostname）
+NAS_NAME=
+# 检查的磁盘挂载点（逗号分隔）与占用告警阈值
+CHECK_MOUNTS=/,/vol1
+DISK_WARN_PCT=90
+# 检查的端口（端口:名称，逗号分隔）
+CHECK_PORTS=22:SSH,2298:DSH,5667:fnOS
+MEM_WARN_PCT=95
 EOF
   chmod 600 "$ENV_FILE"
   echo "    已创建 $ENV_FILE（请填入 GITHUB_TOKEN）"
@@ -48,11 +64,11 @@ else
   echo "    已存在 $ENV_FILE，保持不动"
 fi
 
-echo "==> 安装 cron（每 2 小时整点，即 00:00 / 02:00 / ... ）"
+echo "==> 安装 cron（每小时整点执行）"
 cat >"$CRON_FILE" <<'EOF'
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-0 */2 * * * root /usr/local/sbin/linuxrestart-guard
+0 * * * * root /usr/local/sbin/linuxrestart-guard
 EOF
 chmod 644 "$CRON_FILE"
 
@@ -80,5 +96,6 @@ echo
 echo "完成。下一步："
 echo "  1) 编辑 $ENV_FILE 填入 GITHUB_TOKEN（Contents: Read and write）"
 echo "  2) 联调： $GUARD_DST --status"
-echo "  3) 联调： $GUARD_DST --dry-run   （只写回不重启）"
-echo "  4) 确认无误后把 DRY_RUN 改成 0，并触发一次真实测试"
+echo "  3) 联调： $GUARD_DST --check     （只做 NAS 检查/上报）"
+echo "  4) 联调： $GUARD_DST --dry-run   （只写回不重启、不上报）"
+echo "  5) 确认无误后把 DRY_RUN 改成 0，并触发一次真实测试"
