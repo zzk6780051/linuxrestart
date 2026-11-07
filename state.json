@@ -1,6 +1,1 @@
-{
-  "power": true,
-  "updated_at": "2026-11-07T18:57:34.695Z",
-  "updated_by": "web",
-  "last_reboot_at": null
-}
+{"power":false,"updated_at":"2026-11-07T19:00:02Z","updated_by":"cron","last_reboot_at":"2026-11-07T19:00:02Z"}
