@@ -444,7 +444,7 @@ else
 fi
 
 build_reboot_plan
-NAS_CONTENT+="<br><br>${REBOOT_PLAN_LINE}<br>🤖 由 NAS 定时任务每小时自动上报"
+NAS_CONTENT+="<br>${REBOOT_PLAN_LINE}<br>🤖 由 NAS 定时任务每小时自动上报"
 
 if [ "$MODE" = "check" ]; then
   printf 'nas     : %s\n' "$([ "$NAS_OK" = "1" ] && echo ok || echo failed)"
