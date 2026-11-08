@@ -197,6 +197,21 @@ echo "10) --boot：端口迟迟不就绪时不阻塞（超时后仍上报）"
 CHECK_PORTS="1:DeadPort" BOOT_WAIT=0 BOOT_MAX_WAIT=0 BOOT_RETRIES=1 DRY_RUN=1 bash "$GUARD" --boot
 check "日志记录等待端口超时" grep -q '等待端口超时' "$WORK/guard.log"
 
+echo "11) 下次检查时间按 :00 / :30 计算"
+mkdir -p "$WORK/bin"
+cat >"$WORK/bin/date" <<'EOF'
+#!/bin/bash
+if [ "$1" = "+%H" ] && [ -n "${FAKE_HH:-}" ]; then echo "$FAKE_HH"; exit 0; fi
+if [ "$1" = "+%M" ] && [ -n "${FAKE_MM:-}" ]; then echo "$FAKE_MM"; exit 0; fi
+exec /bin/date "$@"
+EOF
+chmod +x "$WORK/bin/date"
+out="$(FAKE_HH=15 FAKE_MM=12 PATH="$WORK/bin:$PATH" DRY_RUN=1 bash "$GUARD" --check)"
+check "15:12 时下次检查为 15:30" bash -c 'echo "$0" | grep -q "下次检查: 15:30"' "$out"
+out="$(FAKE_HH=23 FAKE_MM=45 PATH="$WORK/bin:$PATH" DRY_RUN=1 bash "$GUARD" --check)"
+check "23:45 时下次检查为 00:00" bash -c 'echo "$0" | grep -q "下次检查: 00:00"' "$out"
+check "install.sh 使用 */30 定时" grep -q '\*/30 \* \* \* \* root /usr/local/sbin/linuxrestart-guard' "$REPO_DIR/scripts/install.sh"
+
 echo
 if [ -n "${FAILED:-}" ]; then
   echo "有测试失败"

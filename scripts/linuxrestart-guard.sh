@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# linuxrestart-guard —— 每小时运行一次（cron），做两件事：
+# linuxrestart-guard —— 每 30 分钟运行一次（cron），做两件事：
 #   1) 检查本机（NAS）状态：负载 / 内存 / 磁盘 / 温度 / 关键端口，把结果作为 id=1
 #      的通知写入 notify 仓库的 data.json（NOTIFY_ENABLED=1 时），供「实时通知中心」展示；
 #   2) 检查 GitHub 仓库中的 state.json：power = true 时先把状态写回 false（记录
@@ -423,6 +423,18 @@ POWER="unknown"
 UPDATED="-"
 LAST_REBOOT="-"
 
+# 下一次检查时间：cron 在 :00 和 :30 触发
+next_check_time() {
+  local hh mm
+  hh="$(date '+%H')"
+  mm="$(date '+%M')"
+  if [ "$((10#$mm))" -lt 30 ]; then
+    printf '%s:30' "$hh"
+  else
+    printf '%02d:00' "$(((10#$hh + 1) % 24))"
+  fi
+}
+
 # 重启计划行：根据 state.json 的 power 生成提示，并附下次检查时间
 build_reboot_plan() {
   case "$POWER" in
@@ -431,8 +443,8 @@ build_reboot_plan() {
     *) REBOOT_PLAN_LINE="❔ 重启计划: 未知 — 读取 state.json 失败" ;;
   esac
   local next_check
-  next_check="$(date -d '+1 hour' '+%H:00' 2>/dev/null || echo '下个整点')"
-  REBOOT_PLAN_LINE+="<br>⏰ 下次检查: ${next_check}（每小时整点）"
+  next_check="$(next_check_time)"
+  REBOOT_PLAN_LINE+="<br>⏰ 下次检查: ${next_check}（每 30 分钟）"
 }
 
 plan_plain() { printf '%s' "$REBOOT_PLAN_LINE" | sed 's/<br>/ ／ /g'; }
@@ -498,7 +510,7 @@ else
 fi
 
 build_reboot_plan
-NAS_CONTENT+="<br>${REBOOT_PLAN_LINE}<br>🤖 由 NAS 定时任务每小时自动上报"
+NAS_CONTENT+="<br>${REBOOT_PLAN_LINE}<br>🤖 由 NAS 定时任务每 30 分钟自动上报"
 
 if [ "$MODE" = "check" ]; then
   printf 'nas     : %s\n' "$([ "$NAS_OK" = "1" ] && echo ok || echo failed)"

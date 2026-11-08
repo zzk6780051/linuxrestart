@@ -1,8 +1,8 @@
 # Linux Restart
 
 一个「远程重启开关」：网页上只有一个按钮，开关状态写入 GitHub 仓库里的 `state.json`；
-NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把状态写回关闭，再重启本机**。
-同一个定时任务还会每小时检查一次 NAS 状态，并写入 [notify 仓库](https://github.com/zzk6780051/notify)
+NAS 上的定时任务**每 30 分钟**检查一次，若为开启状态则**先把状态写回关闭，再重启本机**。
+同一个定时任务还会每 30 分钟检查一次 NAS 状态，并写入 [notify 仓库](https://github.com/zzk6780051/notify)
 `data.json` 的 `id=1` 通知（「实时通知中心」页面展示）。
 
 ```
@@ -15,7 +15,7 @@ NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把�
         GitHub 仓库 state.json  {"power": true}
                     │
                     ▼
-   NAS cron（每小时） linuxrestart-guard
+   NAS cron（每 30 分钟） linuxrestart-guard
                     │  ① NAS 状态检查（负载/内存/磁盘/温度/端口）
                     │     └→ notify 仓库 data.json（id=1 通知）
                     │  ② power=true → 写回 false → 校验 → reboot
@@ -27,7 +27,7 @@ NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把�
 - **token 只在服务端**：浏览器只访问 `/api/state`，拿不到任何凭据。
 - **写操作有口令**：`TOGGLE_PASSCODE` 未配置时写接口直接 503。
 - **单一部署**：页面与 API 全部由 Cloudflare Pages 提供（Git 集成部署），不用 GitHub Pages。
-- **每小时上报**：NAS 存活状态会写进 notify 页面（id=1 通知），同时避免其监控工作流误判「NAS 离线」。
+- **每 30 分钟上报**：NAS 存活状态会写进 notify 页面（id=1 通知），同时避免其监控工作流误判「NAS 离线」。
 
 ## 目录
 
@@ -36,7 +36,7 @@ NAS 上的定时任务**每小时**检查一次，若为开启状态则**先把�
 | `index.html` / `assets/` | 开关页面（纯静态） |
 | `functions/api/state.js` | Cloudflare Pages Function：读写 GitHub 状态文件 |
 | `state.json` | 开关状态（由页面/守护脚本提交更新） |
-| `scripts/linuxrestart-guard.sh` | NAS 端守护脚本（cron 每小时执行，含 NAS 状态上报） |
+| `scripts/linuxrestart-guard.sh` | NAS 端守护脚本（cron 每 30 分钟执行，含 NAS 状态上报） |
 | `scripts/install.sh` | 安装脚本（写 cron、日志、配置模板） |
 | `scripts/test-api.mjs` | API 逻辑单测（mock GitHub） |
 | `scripts/test-guard.sh` | 守护脚本 dry-run 测试（mock GitHub） |
@@ -88,11 +88,11 @@ GitHub → Settings → Developer settings → **Fine-grained tokens** → Gener
 sudo bash scripts/install.sh
 ```
 
-会安装（每小时整点执行，重启检查 + NAS 状态上报；另加一条 `@reboot`，每次开机后自动上报一次 NAS 状态）：
+会安装（每 30 分钟执行一次，重启检查 + NAS 状态上报；另加一条 `@reboot`，每次开机后自动上报一次 NAS 状态）：
 
 - `/usr/local/sbin/linuxrestart-guard`
 - `/etc/linuxrestart/linuxrestart.env`（权限 600，仅 root 可读）
-- `/etc/cron.d/linuxrestart`：`0 * * * * root /usr/local/sbin/linuxrestart-guard`（每小时整点）
+- `/etc/cron.d/linuxrestart`：`*/30 * * * * root /usr/local/sbin/linuxrestart-guard`（每小时 :00 和 :30）
 - `/var/log/linuxrestart.log` + logrotate
 
 然后填入 token（与 Cloudflare 里的可以用同一个）：

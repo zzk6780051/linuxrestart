@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# 在本机（NAS）安装 linuxrestart 定时任务（每小时执行一次）：
+# 在本机（NAS）安装 linuxrestart 定时任务（每 30 分钟执行一次）：
 #   - /usr/local/sbin/linuxrestart-guard            守护脚本（重启检查 + NAS 状态上报）
 #   - /etc/linuxrestart/linuxrestart.env            密钥与配置（600，root only）
-#   - /etc/cron.d/linuxrestart                      每小时整点执行一次
+#   - /etc/cron.d/linuxrestart                      每 30 分钟执行一次（:00 / :30）
 #   - /etc/cron.d/linuxrestart-boot                 每次开机（@reboot）自动上报一次 NAS 状态
 #
 # 用法： sudo ./scripts/install.sh
@@ -44,7 +44,7 @@ DRY_RUN=0
 REBOOT_CMD=/sbin/reboot
 
 # ---- NAS 状态上报（notify 仓库）----
-# 1 = 每小时把本机状态写入 notify 仓库 data.json 中 id=1 的通知
+# 1 = 每 30 分钟把本机状态写入 notify 仓库 data.json 中 id=1 的通知
 NOTIFY_ENABLED=1
 NOTIFY_REPO=zzk6780051/notify
 NOTIFY_BRANCH=main
@@ -73,11 +73,11 @@ else
   echo "    已存在 $ENV_FILE，保持不动"
 fi
 
-echo "==> 安装 cron（每小时整点执行）"
+echo "==> 安装 cron（每 30 分钟执行，:00 和 :30）"
 cat >"$CRON_FILE" <<'EOF'
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
-0 * * * * root /usr/local/sbin/linuxrestart-guard
+*/30 * * * * root /usr/local/sbin/linuxrestart-guard
 EOF
 chmod 644 "$CRON_FILE"
 
