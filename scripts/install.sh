@@ -63,6 +63,8 @@ MEM_WARN_PCT=95
 BOOT_WAIT=30
 BOOT_RETRIES=5
 BOOT_RETRY_WAIT=60
+# 开机后等待关键端口就绪的最长秒数（避免服务没起来就误报异常）
+BOOT_MAX_WAIT=300
 EOF
   chmod 600 "$ENV_FILE"
   echo "    已创建 $ENV_FILE（请填入 GITHUB_TOKEN）"

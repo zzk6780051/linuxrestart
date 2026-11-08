@@ -51,6 +51,7 @@ NOTIFY_ID="${NOTIFY_ID:-1}"
 BOOT_WAIT="${BOOT_WAIT:-30}"          # 开机后等待网络就绪的秒数
 BOOT_RETRIES="${BOOT_RETRIES:-5}"     # 检查失败的重试次数
 BOOT_RETRY_WAIT="${BOOT_RETRY_WAIT:-60}"  # 每次重试间隔秒数
+BOOT_MAX_WAIT="${BOOT_MAX_WAIT:-300}"      # 开机后等待关键端口就绪的最长秒数
 
 MODE="run"
 for arg in "$@"; do
@@ -110,28 +111,6 @@ if [ "$MODE" != "status" ] && [ "$MODE" != "boot" ]; then
     log "跳过：已有实例在运行"
     exit 0
   fi
-fi
-
-# ---------------- 开机检查（每次重启后自动跑一次）----------------
-# cron @reboot 调用 --boot：先等网络，再以 --check 上报 NAS 状态；失败自动重试。
-if [ "$MODE" = "boot" ]; then
-  log "开机检查：等待 ${BOOT_WAIT}s 让网络就绪"
-  sleep "$BOOT_WAIT"
-  attempt=0
-  while [ "$attempt" -lt "$BOOT_RETRIES" ]; do
-    attempt=$((attempt + 1))
-    log "开机检查：第 ${attempt}/${BOOT_RETRIES} 次"
-    if "$0" --check >>"$LOG_FILE" 2>&1; then
-      log "开机检查完成（第 ${attempt} 次）"
-      exit 0
-    fi
-    if [ "$attempt" -lt "$BOOT_RETRIES" ]; then
-      log "开机检查失败，${BOOT_RETRY_WAIT}s 后重试"
-      sleep "$BOOT_RETRY_WAIT"
-    fi
-  done
-  log "WARN: 开机检查多次失败，放弃（下一次整点 cron 检查仍会执行）"
-  exit 0
 fi
 
 STATE_URL="$API_BASE/repos/$GITHUB_REPO/contents/$STATE_PATH"
@@ -457,6 +436,52 @@ build_reboot_plan() {
 }
 
 plan_plain() { printf '%s' "$REBOOT_PLAN_LINE" | sed 's/<br>/ ／ /g'; }
+
+# ---------------- 开机检查（每次重启后自动跑一次）----------------
+# cron @reboot 调用 --boot：等网络和关键端口就绪后再上报一次 --check，
+# 避免开机瞬间服务还没起来就误报「NAS 状态异常」；上报失败会重试。
+if [ "$MODE" = "boot" ]; then
+  log "开机检查：等待 ${BOOT_WAIT}s 让网络就绪"
+  sleep "$BOOT_WAIT"
+
+  log "开机检查：等待关键端口就绪（最多 ${BOOT_MAX_WAIT}s）"
+  ready=0
+  deadline=$((SECONDS + BOOT_MAX_WAIT))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    ready=1
+    IFS=',' read -r -a boot_specs <<<"$CHECK_PORTS"
+    for boot_spec in "${boot_specs[@]}"; do
+      [ -z "$boot_spec" ] && continue
+      if ! port_open "${boot_spec%%:*}"; then
+        ready=0
+        break
+      fi
+    done
+    [ "$ready" = "1" ] && break
+    sleep 5
+  done
+  if [ "$ready" = "1" ]; then
+    log "开机检查：端口已就绪"
+  else
+    log "WARN: 等待端口超时，仍按当前状态上报"
+  fi
+
+  attempt=0
+  while [ "$attempt" -lt "$BOOT_RETRIES" ]; do
+    attempt=$((attempt + 1))
+    log "开机检查：第 ${attempt}/${BOOT_RETRIES} 次上报"
+    if "$0" --check >>"$LOG_FILE" 2>&1; then
+      log "开机检查完成（第 ${attempt} 次）"
+      exit 0
+    fi
+    if [ "$attempt" -lt "$BOOT_RETRIES" ]; then
+      log "开机检查失败，${BOOT_RETRY_WAIT}s 后重试"
+      sleep "$BOOT_RETRY_WAIT"
+    fi
+  done
+  log "WARN: 开机检查多次失败，放弃（下一次整点 cron 检查仍会执行）"
+  exit 0
+fi
 
 # ---------------- 主流程 ----------------
 

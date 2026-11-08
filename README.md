@@ -133,7 +133,9 @@ sudo /usr/local/sbin/linuxrestart-guard --dry-run    # 只写回状态，不重�
 
 另外，网页开关被打开/关闭的**那一刻**，Cloudflare Pages Function 也会立即把重启状态写进同一条通知
 （「🔄 重启开关已开启 … 约 1 小时内重启」/「⏸️ 重启开关已关闭 …」），不用等下一次整点检查；
-NAS 重启完成开机后，`@reboot` 的 `--boot` 会等网络就绪再自动跑一次检查，尽快把页面刷新成「🟢 NAS 在线正常」。
+NAS 重启完成开机后，`@reboot` 的 `--boot` 会先等网络就绪、再等关键端口（`CHECK_PORTS`）就绪
+（最长 `BOOT_MAX_WAIT=300` 秒），然后自动跑一次检查，尽快把页面刷新成「🟢 NAS 在线正常」；
+不会因为服务还没启动就误报「🔴 NAS 状态异常」。
 Function 里相关环境变量（都有默认值，通常不必配）：`NOTIFY_ENABLED`、`NOTIFY_TOKEN`、`NOTIFY_REPO`、
 `NOTIFY_BRANCH`、`NOTIFY_PATH`、`NOTIFY_ID`。
 触发重启时会先上报「🔄 NAS 即将重启」，重启后下一轮再报「🟢 NAS 在线正常」。

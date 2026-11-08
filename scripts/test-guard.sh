@@ -188,9 +188,14 @@ echo "8) 缺少 token 时静默退出"
 GITHUB_TOKEN="" NOTIFY_TOKEN="" bash "$GUARD"
 check "缺少 token 记录 skip" grep -q 'GITHUB_TOKEN 未配置' "$WORK/guard.log"
 
-echo "9) --boot：开机后自动检查一次"
-BOOT_WAIT=0 BOOT_RETRIES=2 BOOT_RETRY_WAIT=0 DRY_RUN=1 bash "$GUARD" --boot
+echo "9) --boot：开机后等端口就绪再自动检查一次"
+BOOT_WAIT=0 BOOT_MAX_WAIT=5 BOOT_RETRIES=2 BOOT_RETRY_WAIT=0 DRY_RUN=1 bash "$GUARD" --boot
 check "日志记录开机检查完成" grep -q '开机检查完成' "$WORK/guard.log"
+check "日志记录端口已就绪" grep -q '端口已就绪' "$WORK/guard.log"
+
+echo "10) --boot：端口迟迟不就绪时不阻塞（超时后仍上报）"
+CHECK_PORTS="1:DeadPort" BOOT_WAIT=0 BOOT_MAX_WAIT=0 BOOT_RETRIES=1 DRY_RUN=1 bash "$GUARD" --boot
+check "日志记录等待端口超时" grep -q '等待端口超时' "$WORK/guard.log"
 
 echo
 if [ -n "${FAILED:-}" ]; then
