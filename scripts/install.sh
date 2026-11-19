@@ -90,7 +90,11 @@ EOF
 chmod 644 "$BOOT_CRON_FILE"
 
 echo "==> 检查日志文件"
-install -m 640 /dev/null /var/log/linuxrestart.log
+if [ -f /var/log/linuxrestart.log ]; then
+  chmod 640 /var/log/linuxrestart.log
+else
+  install -m 640 /dev/null /var/log/linuxrestart.log
+fi
 if command -v logrotate >/dev/null 2>&1 && [ -d /etc/logrotate.d ]; then
   cat >/etc/logrotate.d/linuxrestart <<'EOF'
 /var/log/linuxrestart.log {
