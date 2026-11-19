@@ -11,9 +11,9 @@
 #   6. 校验安装结果并打印摘要
 #
 # 用法：
-#   sudo bash /vol2/1000/应用/应用/install.sh
-#   sudo bash /vol2/1000/应用/应用/install.sh --token <GitHub PAT>
-#   sudo bash /vol2/1000/应用/应用/install.sh --skip-test     # 跳过自检
+#   sudo bash /vol2/1000/应用/应用/Linux/install.sh
+#   sudo bash /vol2/1000/应用/应用/Linux/install.sh --token <GitHub PAT>
+#   sudo bash /vol2/1000/应用/应用/Linux/install.sh --skip-test     # 跳过自检
 #
 set -euo pipefail
 
