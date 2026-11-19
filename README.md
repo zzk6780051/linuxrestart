@@ -89,15 +89,28 @@ GitHub → Settings → Developer settings → **Fine-grained tokens** → Gener
 sudo bash /vol2/1000/应用/应用/install.sh
 ```
 
-`install.sh` 会：备份现有安装（`/etc/linuxrestart/backups/`，保留最近 10 份）→ 安装脚本/配置/cron/logrotate →
-（可选）写入 GitHub Token → 运行自检 → 校验安装并打印摘要。支持：
+`install.sh` 会：检查系统依赖（curl/jq/flock/cron，缺失时自动 `apt-get` 安装）→ 备份现有安装
+（`/etc/linuxrestart/backups/`，保留最近 10 份）→ 安装脚本/配置/cron/logrotate →（可选）写入 GitHub Token →
+保存配置快照到数据盘 → 运行自检 → 校验安装并打印摘要。支持：
 
 ```sh
 sudo bash /vol2/1000/应用/应用/install.sh --token <GitHub PAT>   # 非交互写入 token
 sudo bash /vol2/1000/应用/应用/install.sh --skip-test            # 跳过自检（无 node/python3 环境）
+sudo bash /vol2/1000/应用/应用/install.sh --no-deps              # 不自动安装系统依赖
 ```
 
-重装/迁移到新机器时，把 `Linux` 目录与上级的 `install.sh` 一起复制过去，执行同一条命令即可（已有配置和 token 会被保留）。
+### 重装系统后一键恢复
+
+数据盘 `/vol2` 保留的情况下（系统盘重装会清空 `/etc`、`/usr/local/sbin`、cron），只需执行一次：
+
+```sh
+sudo bash /vol2/1000/应用/应用/install.sh
+```
+
+- 系统依赖（curl/jq/flock/cron/ca-certificates）缺失时会自动 `apt-get` 安装
+- token 等配置会从数据盘快照 `secrets/linuxrestart.env`（600，仅 root）自动恢复，无需重新粘贴
+- 每次安装都会刷新该快照，所以之后换 token 也只需重跑一次 `install.sh`
+- 若 `/vol2` 也被清空：重新 `git clone` 本仓库后，执行 `sudo bash scripts/install.sh`，再按提示补 token
 
 会安装（每 30 分钟执行一次，重启检查 + NAS 状态上报；另加一条 `@reboot`，每次开机后自动上报一次 NAS 状态）：
 
