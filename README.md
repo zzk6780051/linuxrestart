@@ -36,7 +36,7 @@ NAS 上的定时任务**每 30 分钟**检查一次，若为开启状态则**先
 | `index.html` / `assets/` | 开关页面（纯静态） |
 | `functions/api/state.js` | Cloudflare Pages Function：读写 GitHub 状态文件 |
 | `state.json` | 开关状态（由页面/守护脚本提交更新） |
-| `install.sh` | **一键安装 / 重装**（备份 → 装脚本 → 配置 → cron → 自检 → 校验） |
+| `../install.sh` | **一键安装 / 重装**（放在仓库上一级目录，如 `/vol2/1000/应用/应用/install.sh`；备份 → 装脚本 → 配置 → cron → 自检 → 校验） |
 | `scripts/linuxrestart-guard.sh` | NAS 端守护脚本（cron 每 30 分钟执行，含 NAS 状态上报） |
 | `scripts/install.sh` | 底层安装脚本（写 cron、日志、配置模板；由 `install.sh` 调用） |
 | `scripts/test-api.mjs` | API 逻辑单测（mock GitHub） |
@@ -83,21 +83,21 @@ GitHub → Settings → Developer settings → **Fine-grained tokens** → Gener
 
 ## 三、配置 NAS 定时任务
 
-在 NAS 上（仓库目录内），一条命令完成安装或重装：
+在 NAS 上，一条命令完成安装或重装（`install.sh` 位于仓库上一级目录 `Linux` 的同级，会自动识别程序目录）：
 
 ```sh
-sudo bash install.sh
+sudo bash /vol2/1000/应用/应用/install.sh
 ```
 
 `install.sh` 会：备份现有安装（`/etc/linuxrestart/backups/`，保留最近 10 份）→ 安装脚本/配置/cron/logrotate →
 （可选）写入 GitHub Token → 运行自检 → 校验安装并打印摘要。支持：
 
 ```sh
-sudo bash install.sh --token <GitHub PAT>   # 非交互写入 token
-sudo bash install.sh --skip-test            # 跳过自检（无 node/python3 环境）
+sudo bash /vol2/1000/应用/应用/install.sh --token <GitHub PAT>   # 非交互写入 token
+sudo bash /vol2/1000/应用/应用/install.sh --skip-test            # 跳过自检（无 node/python3 环境）
 ```
 
-重装/迁移到新机器时，把整个目录复制过去，执行同一条命令即可（已有配置和 token 会被保留）。
+重装/迁移到新机器时，把 `Linux` 目录与上级的 `install.sh` 一起复制过去，执行同一条命令即可（已有配置和 token 会被保留）。
 
 会安装（每 30 分钟执行一次，重启检查 + NAS 状态上报；另加一条 `@reboot`，每次开机后自动上报一次 NAS 状态）：
 
